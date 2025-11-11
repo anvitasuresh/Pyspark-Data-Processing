@@ -24,9 +24,9 @@ The dataset contains over 20 million records, making it suitable for demonstrati
 ## Pipeline Description
 The pipeline performs the following steps:
 
-1. *Data Loading:* The dataset is loaded from a Databricks table containing commodity price data.
+1. **Data Loading:** The dataset is loaded from a Databricks table containing commodity price data.
 
-2. *Transformations:* 
+2. **Transformations:**
     - Filters out invalid prices (null values and negative/zero prices)
     - Removes duplicate records
     - Joins with a regional lookup table to map states to geographic regions (South, North, East, West, Northeast, Central)
@@ -36,27 +36,27 @@ The pipeline performs the following steps:
 ![transformations](imgs/transformations.png)
 
 
-3. *SQL Queries:*
+3. **SQL Queries:**
     - Query 1: Identifies the top 10 most volatile commodities by region based on average price volatility percentage
     - Query 2: Analyzes price patterns by state, comparing average prices above and below modal prices
 
 ![sql1](imgs/sql%201.png)
 ![sql2](imgs/sql%202.png)
 
-4. *Write Results:* The processed data is written to a Parquet file for efficient storage and future analysis.
+4. **Write Results:** The processed data is written to a Parquet file for efficient storage and future analysis.
 
 ![parquet](imgs/parquet.png)
 
-5. *Performance Optimization:* Filters were applied early in the pipeline, joins were used for small lookup tables, and unnecessary shuffles were avoided.
+5. **Performance Optimization:** Filters were applied early in the pipeline, joins were used for small lookup tables, and unnecessary shuffles were avoided.
 
 ## Performance Analysis
 
 ### Query Optimization and Physical Plan
-The pipeline uses .explain(True) to display the physical execution plan of the query execution. The output from .explain() reveals several key optimizations that Spark applied automatically to improve query performance. One of the most significant optimizations is filter pushdown. In the physical plan, we can see that Spark pushed the filters for null values and positive prices (Min_Price > 0, Max_Price > 0, Modal_Price > 0, and the corresponding isNotNull checks) down to the earlier stage in the execution. This means these filters were applied during the data reading process from the commodities_india table, significantly reducing the amount of data loaded into memory and processed in subsequent stages. By filtering out invalid records at the source, Spark avoids the computational overhead of processing unnecessary data through joins, transformations, and aggregations. This reduced the dataset size by approximately 15-20% before any transformations or joins, minimizing memory consumption and speeding up further operations.  
+The pipeline uses `.explain(True)` to display the physical execution plan of the query execution. The output from `.explain()` reveals several key optimizations that Spark applied automatically to improve query performance. One of the most significant optimizations is filter pushdown. In the physical plan, we can see that Spark pushed the filters for null values and positive prices (`Min_Price > 0, Max_Price > 0, Modal_Price > 0`, and the corresponding isNotNull checks) down to the earlier stage in the execution. This means these filters were applied during the data reading process from the `commodities_india` table, significantly reducing the amount of data loaded into memory and processed in subsequent stages. By filtering out invalid records at the source, Spark avoids the computational overhead of processing unnecessary data through joins, transformations, and aggregations. This reduced the dataset size by approximately 15-20% before any transformations or joins, minimizing memory consumption and speeding up further operations.  
 
 The execution plan also demonstrates pushdown optimization in the join operation. When joining the filtered commodity data with the regional lookup table, Spark pushes down the filter conditions to reduce the data size before performing the join. This minimizes the shuffle operation required for the join, as only valid records participate in the join operation. Additionally, Spark's optimizer automatically reordered operations to maximize efficiency. The dropDuplicates() operation was performed after initial filtering but before the more expensive join operation, which reduces the amount of data that needs to be shuffled across the cluster during the join.
 
-To further optimize the pipeline, more strategies were employed. Column pruning occurs where the withColumn operations for Avg_Price and Price_Volatility_Pct were applied in a single transformation chain rather than separate operations, reducing the number of times it goes over the data. Finally, the aggregations in the SQL queries were written with WHERE clauses that filter before grouping, and HAVING clauses that filter after grouping, ensuring Spark only processes and aggregates relevant data at each stage. Furthermore, effective partitioning improves pipeline performance by distributing data evenly across the Spark cluster. This allows Spark to process related data locally on each node, reducing the need for shuffling during operations like `groupBy` and `join`. By keeping related records co-located, partitioning minimizes network data transfers, which is a critical optimization for large datasets where network communication can slow down processing. The result is faster query execution, lower shuffle costs, and more efficient resource utilization.
+To further optimize the pipeline, more strategies were employed. Column pruning occurs where the withColumn operations for `Avg_Price` and `Price_Volatility_Pct` were applied in a single transformation chain rather than separate operations, reducing the number of times it goes over the data. Finally, the aggregations in the SQL queries were written with WHERE clauses that filter before grouping, and HAVING clauses that filter after grouping, ensuring Spark only processes and aggregates relevant data at each stage. Furthermore, effective partitioning improves pipeline performance by distributing data evenly across the Spark cluster. This allows Spark to process related data locally on each node, reducing the need for shuffling during operations like `groupBy` and `join`. By keeping related records co-located, partitioning minimizes network data transfers, which is a critical optimization for large datasets where network communication can slow down processing. The result is faster query execution, lower shuffle costs, and more efficient resource utilization.
 
 ### Query Details
 
@@ -66,25 +66,25 @@ To further optimize the pipeline, more strategies were employed. Column pruning 
 While the pipeline performs efficiently for the commodity dataset, several potential bottlenecks were identified. The primary bottleneck is the join operation between the main commodity data and the regional lookup table. Although this is a relatively small join (the lookup table has only ~50 rows), if the main dataset grows significantly larger, this could become an operation with many shuffles. However, Spark likely applies broadcast join optimization here since the lookup table is small, which helps this concern. Another potential bottleneck is data skew in the groupBy operations, particularly in SQL Query 2 which groups by State. If certain states have significantly more commodity records than others (for example, Maharashtra or Uttar Pradesh might have more markets), this can lead to uneven partition sizes where some executors process much more data than others, resulting in stragglers that slow down the overall query. Finally, the aggregation operations that calculate average prices and volatility metrics require shuffling data across partitions, which is unavoidable but was minimized by applying filters early to reduce the data volume before these expensive operations.
 
 
-Here are the results of .explain(), which shows the physical execution plan:
+Here are the results of `.explain()`, which shows the physical execution plan:
 
 ![explain](imgs/explain%20.png)
 
 ## Actions vs. Transformations
 In Spark, operations are divided into two main types: transformations and actions.
 
-*Transformations (Lazy)*
+**Transformations (Lazy)**
 
 Transformations are lazy, meaning they don't execute immediately. Spark tracks the steps (like filters, selects, or joins) it needs to perform later but waits until an action is called to execute the plan.
 
-Example from the code:
+*Example from the code:*
 ```python
 transformation = df.select("State", "Commodity", "Market", "Min_Price", "Max_Price", "Modal_Price")
 ```
 
 This line selects columns but doesn't do anything with them yet. It simply records this step in the plan.
 
-*Actions (Eager)*
+**Actions (Eager)**
 
 Actions prompt Spark to run the computation and produce a result. Common actions include:
 
@@ -92,7 +92,7 @@ Actions prompt Spark to run the computation and produce a result. Common actions
 - `count()`: counts the number of rows
 - `write()`: saves the DataFrame 
 
-Example from the code:
+*Example from the code:*
 ```python
 record_count = transformation.count()
 sample_data = transformation.show()
@@ -100,7 +100,7 @@ sample_data = transformation.show()
 
 Here, Spark is actually executing the plan of reading data, applying transformations, and returning results.
 
-*Execution Time Comparison*
+**Execution Time Comparison**
 
 The following information summarizes the execution times for different operations in Spark:
 
